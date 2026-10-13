@@ -24,7 +24,9 @@ export only images belonging to the selected conversation and date window:
 "$PYTHON" "$SKILL_DIR/scripts/common/export_chat.py" CONTACT --year 2026 --with-media --no-transcribe -o /path/to/chat.html
 ```
 
-This creates `chat.html`, `chat.media.json` and `chat.assets/`. TXT shows relative
+This creates `chat.html`, `chat.media.json` and a fresh `chat.assets-<export-id>/`
+directory named in the manifest's `assets_directory` field. Repeated exports keep
+their assets separate, so a new date window does not inherit older images. TXT shows relative
 paths, Markdown and HTML preview supported plaintext images. Format is inferred
 from `.md`/`.html` or selected with `--format txt|markdown|html`. Keep the three
 outputs together when moving them. The manifest explicitly distinguishes resolved,

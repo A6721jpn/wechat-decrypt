@@ -88,7 +88,7 @@ def test_index_chain_resolves_registered_name_without_xml_md5_guess(indexed):
     assert all(value not in serialized for value in ['SECRET', 'cdnurl', 'packed_hex', 'example.invalid', str(indexed.source)])
     if os.name != 'nt':
         assert stat.S_IMODE(path.stat().st_mode) == 0o600
-        assert stat.S_IMODE((indexed.output/'chat.assets').stat().st_mode) == 0o700
+        assert stat.S_IMODE((indexed.output/manifest['assets_directory']).stat().st_mode) == 0o700
 
 
 def test_missing_server_id_and_cross_shard_local_ids_remain_distinct(indexed):
@@ -118,7 +118,7 @@ def test_missing_and_encrypted_assets_are_explicit(indexed, content, expected, r
     row, _ = indexed.add(content=content)
     entry = indexed.export([row])['entries'][0]
     assert (entry['status'], entry['reason'], entry['files']) == (expected, reason, [])
-    assert not list(indexed.output.glob('chat.assets/**/*'))
+    assert not list(indexed.output.glob('chat.assets-*/**/*'))
 
 
 def test_duplicate_resource_mapping_does_not_choose_first(indexed):
@@ -156,9 +156,10 @@ def test_wrong_or_unsupported_relationship_is_not_resolved(indexed, change):
 def test_only_selected_message_assets_are_copied(indexed):
     selected, _ = indexed.add()
     indexed.add(local_id=20, server_id=1020, identifier='b'*32)
-    entries = indexed.export([selected])['entries']
+    manifest = indexed.export([selected])
+    entries = manifest['entries']
     assert len(entries) == 1
-    assert len([p for p in (indexed.output/'chat.assets').rglob('*') if p.is_file()]) == 1
+    assert len([p for p in (indexed.output/manifest['assets_directory']).rglob('*') if p.is_file()]) == 1
 
 
 def test_equal_local_ids_in_different_conversations_remain_distinct(indexed):
@@ -208,7 +209,7 @@ def test_changing_source_does_not_publish_partial_image(indexed, monkeypatch):
     monkeypatch.setattr(media_manifest.shutil, 'copyfileobj', changing_copy)
     entry = indexed.export([row])['entries'][0]
     assert entry['status'] == 'not_found' and entry['reason'] == 'resource_changed'
-    assert not [p for p in (indexed.output/'chat.assets').rglob('*') if p.is_file()]
+    assert not [p for p in indexed.output.glob('chat.assets-*/**/*') if p.is_file()]
 
 
 def test_index_path_cannot_escape_account(indexed):
@@ -216,7 +217,7 @@ def test_index_path_cannot_escape_account(indexed):
     assert indexed.export([row])['entries'][0]['reason'] == 'unsafe_index_path'
 
 
-def test_source_and_destination_symlinks_cannot_escape(indexed, tmp_path):
+def test_source_and_destination_symlinks_cannot_escape(indexed, tmp_path, monkeypatch):
     row, location = indexed.add()
     outside = tmp_path/'elsewhere.png'; outside.write_bytes(PNG)
     location.unlink()
@@ -226,8 +227,26 @@ def test_source_and_destination_symlinks_cannot_escape(indexed, tmp_path):
         pytest.skip('Host does not support unprivileged symlinks')
     assert indexed.export([row])['entries'][0]['reason'] == 'unsafe_index_path'
     location.unlink(); location.write_bytes(PNG)
-    (tmp_path/'chat.assets').symlink_to(tmp_path.parent, target_is_directory=True)
+    # Fix the generated name to exercise an existing hostile export-root link.
+    import media_manifest
+    from types import SimpleNamespace
+    monkeypatch.setattr(media_manifest.uuid, 'uuid4', lambda: SimpleNamespace(hex='0'*32))
+    (tmp_path/('chat.assets-'+'0'*16)).symlink_to(tmp_path.parent, target_is_directory=True)
     assert indexed.export([row])['entries'][0]['reason'] == 'unsafe_export_path'
+
+
+def test_repeated_export_isolates_selected_assets_without_deleting_old_files(indexed):
+    first, _ = indexed.add()
+    second, _ = indexed.add(local_id=20, server_id=1020, identifier='b'*32, stamp=STAMP+86400)
+    old = indexed.export([first])
+    new = indexed.export([second])
+    assert old['assets_directory'] != new['assets_directory']
+    old_file = indexed.output / old['entries'][0]['files'][0]['path']
+    new_file = indexed.output / new['entries'][0]['files'][0]['path']
+    assert old_file.read_bytes() == new_file.read_bytes() == PNG
+    current_files = [p for p in (indexed.output/new['assets_directory']).rglob('*') if p.is_file()]
+    assert current_files == [new_file]
+    assert old_file not in current_files
 
 
 @pytest.mark.parametrize('extension,marker', [('txt','[resolved] ->'), ('md','![Image]('), ('html','<img src=')])

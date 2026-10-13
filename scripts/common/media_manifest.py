@@ -7,6 +7,7 @@ import re
 import shutil
 import sqlite3
 import tempfile
+import uuid
 
 import db
 import message
@@ -255,6 +256,7 @@ def export_images(rows, conversation, table, output_path, storage=None, account=
             info = path.stat()
             snapshot.update(f'{info.st_size}:{info.st_mtime_ns}'.encode())
     manifest['snapshot'] = snapshot.hexdigest()
+    asset_root = output.parent / (output.stem + '.assets-' + uuid.uuid4().hex[:16])
     index = ImageIndex(storage, conversation, selected)
     for row in selected:
         identity = {'conversation': conversation, 'table': table,
@@ -264,7 +266,7 @@ def export_images(rows, conversation, table, output_path, storage=None, account=
             identity['server_id'] = str(row['server_id'])
         entry = {'message': identity, 'kind': 'image', 'status': 'not_found', 'files': []}
         token = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()[:24]
-        destination = output.parent / (output.stem + '.assets') / token
+        destination = asset_root / token
         links, reason = index.resolve(row)
         reasons = []
         if account is None:
@@ -278,6 +280,7 @@ def export_images(rows, conversation, table, output_path, storage=None, account=
                 reasons.append(failure)
         if entry['files']:
             entry['status'] = 'resolved'
+            manifest['assets_directory'] = asset_root.name
         else:
             if 'encrypted_unsupported' in reasons:
                 entry['status'] = 'encrypted_unsupported'

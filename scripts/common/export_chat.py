@@ -292,6 +292,8 @@ def main():
         media_manifest.write_manifest(manifest_path, manifest)
         assets = {(e['message']['shard'], str(e['message']['local_id'])): e for e in manifest['entries']}
         print(f"媒体清单: {manifest_path}", file=sys.stderr)
+        if manifest.get('assets_directory'):
+            print(f"媒体目录: {Path(out).parent / manifest['assets_directory']}", file=sys.stderr)
         counts = {status: sum(e['status'] == status for e in manifest['entries'])
                   for status in ('resolved', 'not_found', 'encrypted_unsupported')}
         print(f"图片：已关联 {counts['resolved']}，未找到 {counts['not_found']}，"
