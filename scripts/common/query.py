@@ -43,6 +43,16 @@ def _chunks(values: list[str], size: int = 200):
 
 def _iter_query_pages(db_path: str, selects: list[str], page_size: int = 500):
     union = " UNION ALL ".join(selects)
+    if config.DB_BACKEND == 'sqlite3':
+        # One sort/scan, with bounded Python batches, instead of repeating the
+        # entire UNION and discarding an increasing OFFSET for each page.
+        yield from db.iter_query(
+            db_path,
+            'SELECT * FROM (' + union + ') '
+            'ORDER BY create_time DESC, source_table ASC, local_id DESC, server_id DESC;',
+            batch_size=page_size,
+        )
+        return
     offset = 0
     while True:
         rows = db.query(
@@ -73,14 +83,36 @@ def list_chats() -> list[dict]:
             for _table, wxid in sorted(name2id.items(), key=lambda x: x[1])]
 
 
+def _validate_window(days: int, limit: int | None = None):
+    if type(days) is not int or days < 1:
+        raise ValueError('days must be a positive integer')
+    if limit is not None and (type(limit) is not int or not 1 <= limit <= 2000):
+        raise ValueError('limit must be an integer between 1 and 2000')
+
+
+def list_chat_page(limit: int = 100, offset: int = 0) -> dict:
+    """Return a bounded page with a continuation offset."""
+    if type(limit) is not int or not 1 <= limit <= 2000:
+        raise ValueError('limit must be an integer between 1 and 2000')
+    if type(offset) is not int or offset < 0:
+        raise ValueError('offset must be a nonnegative integer')
+    chats = list_chats()
+    page = chats[offset:offset + limit]
+    following = offset + len(page)
+    return {'chats': page, 'count': len(page), 'total': len(chats),
+            'limit': limit, 'offset': offset,
+            'next_offset': following if following < len(chats) else None}
+
+
 def read_chat(contact: str, limit: int = 50, days: int = 7) -> dict:
+    _validate_window(days, limit)
     name2id = db.get_name2id()
     since = int(time.time()) - days * 86400
     matched = contacts.find_contact(contact, name2id)
     if not matched:
         return {"error": f"未找到匹配 '{contact}' 的联系人", "candidates": []}
-    if len(matched) > 5:
-        return {"error": f"匹配 '{contact}' 的联系人太多({len(matched)})",
+    if len(matched) > 1:
+        return {"error": f"匹配 '{contact}' 的联系人不唯一({len(matched)})，请使用具体 wxid 选择",
                 "candidates": [{"wxid": w, "display": d} for _t, w, d in matched[:10]]}
     out = []
     for table, wxid, display in matched:
@@ -91,8 +123,10 @@ def read_chat(contact: str, limit: int = 50, days: int = 7) -> dict:
             rows = db.query(
                 db_path,
                 f"SELECT create_time, local_type, real_sender_id, "
-                f"hex(message_content) AS message_hex "
-                f"FROM {table} WHERE create_time > {since} ORDER BY create_time DESC LIMIT {limit};")
+                f"hex(message_content) AS message_hex, n.user_name AS sender_wxid "
+                f"FROM {_quoted_identifier(table)} m "
+                f"LEFT JOIN Name2Id n ON n.rowid = m.real_sender_id "
+                f"WHERE create_time > {since} ORDER BY create_time DESC LIMIT {limit};")
             msgs.extend(_fmt_msg(row) for row in rows)
         newest = sorted(msgs, key=lambda x: x["_ts"], reverse=True)[:limit]
         out.append({"wxid": wxid, "display": display,
@@ -101,6 +135,7 @@ def read_chat(contact: str, limit: int = 50, days: int = 7) -> dict:
 
 
 def search(keyword: str, days: int = 30, limit: int = 50) -> dict:
+    _validate_window(days, limit)
     name2id = db.get_name2id()
     scan_until = int(time.time())
     since = scan_until - days * 86400
@@ -133,8 +168,9 @@ def search(keyword: str, days: int = 30, limit: int = 50) -> dict:
                 selects.append(
                     f"SELECT '{source}' AS source_table, local_id, server_id, "
                     f"create_time, local_type, "
-                    f"real_sender_id, hex(message_content) AS message_hex "
-                    f"FROM {_quoted_identifier(table)} WHERE create_time > {since} "
+                    f"real_sender_id, hex(message_content) AS message_hex, n.user_name AS sender_wxid "
+                    f"FROM {_quoted_identifier(table)} m "
+                    f"LEFT JOIN Name2Id n ON n.rowid = m.real_sender_id WHERE create_time > {since} "
                     f"AND create_time <= {scan_until} "
                     f"AND (message_content LIKE '%{kw}%' "
                     f"OR instr(hex(message_content), '{kw_hex}') > 0)"
@@ -142,8 +178,9 @@ def search(keyword: str, days: int = 30, limit: int = 50) -> dict:
                 fallback_selects.append(
                     f"SELECT '{source}' AS source_table, local_id, server_id, "
                     f"create_time, local_type, "
-                    f"real_sender_id, hex(message_content) AS message_hex "
-                    f"FROM {_quoted_identifier(table)} WHERE create_time > {since} "
+                    f"real_sender_id, hex(message_content) AS message_hex, n.user_name AS sender_wxid "
+                    f"FROM {_quoted_identifier(table)} m "
+                    f"LEFT JOIN Name2Id n ON n.rowid = m.real_sender_id WHERE create_time > {since} "
                     f"AND create_time <= {scan_until} "
                     "AND (((CAST(local_type AS INTEGER) & 65535) = 49) "
                     "OR hex(substr(message_content, 1, 4)) = '28B52FFD')"
@@ -170,6 +207,7 @@ def search(keyword: str, days: int = 30, limit: int = 50) -> dict:
 
 
 def recent(days: int = 3, limit: int = 100) -> dict:
+    _validate_window(days, limit)
     name2id = db.get_name2id()
     since = int(time.time()) - days * 86400
     messages = []
@@ -178,7 +216,9 @@ def recent(days: int = 3, limit: int = 100) -> dict:
             rows = db.query(
                 db_path,
                 f"SELECT create_time, local_type, real_sender_id, "
-                f"hex(message_content) AS message_hex FROM {table} "
+                f"hex(message_content) AS message_hex, n.user_name AS sender_wxid "
+                f"FROM {_quoted_identifier(table)} m "
+                f"LEFT JOIN Name2Id n ON n.rowid = m.real_sender_id "
                 f"WHERE create_time > {since} ORDER BY create_time DESC LIMIT {limit};")
             if not rows:
                 continue
@@ -202,6 +242,7 @@ def recent(days: int = 3, limit: int = 100) -> dict:
 
 
 def summary(days: int = 3) -> dict:
+    _validate_window(days)
     name2id = db.get_name2id()
     since = int(time.time()) - days * 86400
     by_contact: dict[str, dict] = {}
@@ -210,7 +251,9 @@ def summary(days: int = 3) -> dict:
             rows = db.query(
                 db_path,
                 f"SELECT create_time, local_type, real_sender_id, "
-                f"hex(message_content) AS message_hex FROM {table} "
+                f"hex(message_content) AS message_hex, n.user_name AS sender_wxid "
+                f"FROM {_quoted_identifier(table)} m "
+                f"LEFT JOIN Name2Id n ON n.rowid = m.real_sender_id "
                 f"WHERE create_time > {since} "
                 f"AND ((CAST(local_type AS INTEGER) & 65535) IN (1, 49, 10000, 10002)) "
                 f"ORDER BY create_time DESC LIMIT 30;")
@@ -230,6 +273,7 @@ def summary(days: int = 3) -> dict:
 
 
 def system_events(event: str = "", days: int = 30, limit: int = 100) -> dict:
+    _validate_window(days, limit)
     from collections import Counter
 
     name2id = db.get_name2id()
@@ -288,6 +332,7 @@ def system_events(event: str = "", days: int = 30, limit: int = 100) -> dict:
 
 
 def stats(days: int = 30) -> dict:
+    _validate_window(days)
     from collections import Counter
     name2id = db.get_name2id()
     since = int(time.time()) - days * 86400
@@ -343,7 +388,7 @@ def stats(days: int = 30) -> dict:
 
 def media(out: str = "") -> dict:
     import export_media
-    base = os.path.dirname(db.find_data_dir())
+    base = db.get_account_files_dir()
     out = out or os.path.expanduser("~/Desktop/wechat_media")
     return {"out": out, **export_media.export(base, out)}
 
@@ -351,7 +396,7 @@ def media(out: str = "") -> dict:
 def openfile(name: str, limit: int = 8000) -> dict:
     import glob as _g
     import read_doc
-    base = os.path.dirname(db.find_data_dir())
+    base = db.get_account_files_dir()
     matches = [m for m in _g.glob(os.path.join(base, "msg", "file", "**", f"*{name}*"), recursive=True) if os.path.isfile(m)]
     if not matches:
         return {"error": f"未在 msg/file 找到含 '{name}' 的文档"}
@@ -412,7 +457,9 @@ def _fmt_msg(row: dict) -> dict:
             "is_text": bool(system["text"]),
             "is_system": True,
         }
-    is_me = message.is_my_message(row.get("real_sender_id", ""))
+    # Name2Id row IDs are local to a shard; only wxids are portable.
+    sender = row.get("sender_wxid")
+    direction = "[未知]" if not sender else "[我]" if sender == db.get_my_wxid() else "[对方]"
     if type_key == "49":
         app = appmsg.parse_app_message(content, row.get("local_type", ""))
         details = app["summary"].replace("\n", " ")[:500]
@@ -420,7 +467,7 @@ def _fmt_msg(row: dict) -> dict:
         return {
             "time": message.format_time(ts),
             "_ts": ts_int,
-            "direction": "[我]" if is_me else "[对方]",
+            "direction": direction,
             "type": app["label"],
             "event": None,
             "content": display,
@@ -431,10 +478,10 @@ def _fmt_msg(row: dict) -> dict:
     is_text = type_key == "1" and not content.startswith("<")
     return {
         "time": message.format_time(ts), "_ts": ts_int,
-        "direction": "[我]" if is_me else "[对方]",
+        "direction": direction,
         "type": message.MSG_TYPES.get(type_key, "其他"),
         "event": None,
-        "content": content[:500].replace("\n", " ") if is_text else "",
+        "content": content if is_text else "",
         "is_text": is_text,
         "is_system": False,
     }
@@ -442,6 +489,12 @@ def _fmt_msg(row: dict) -> dict:
 
 # ── 人类可读渲染(非 --json 时) ─────────────────────────────────
 def _human(cmd: str, r) -> str:
+    if cmd == 'list-page':
+        out = [f"显示 {r['count']} / {r['total']} 个对话，offset={r['offset']}:"]
+        out.extend(f"  {c['display']} (wxid: {c['wxid']})" for c in r['chats'])
+        if r['next_offset'] is not None:
+            out.append(f"下一页 offset={r['next_offset']}，limit={r['limit']}")
+        return '\n'.join(out)
     if isinstance(r, dict) and r.get("error"):
         return r["error"] + ("\n" + "\n".join(f"  {c['display']} (wxid: {c['wxid']})" for c in r.get("candidates", [])) if r.get("candidates") else "")
     if cmd == "list":
@@ -507,7 +560,7 @@ def main():
     base = argparse.ArgumentParser(add_help=False)
     base.add_argument("--json", action="store_true", help="结构化 JSON 输出")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("list", parents=[base])
+    p = sub.add_parser("list", parents=[base]); p.add_argument('-n', '--limit', type=int); p.add_argument('--offset', type=int, default=0)
     p = sub.add_parser("read", parents=[base]); p.add_argument("contact"); p.add_argument("-n", "--limit", type=int, default=50); p.add_argument("-d", "--days", type=int, default=7)
     p = sub.add_parser("search", parents=[base]); p.add_argument("keyword"); p.add_argument("-d", "--days", type=int, default=30); p.add_argument("-n", "--limit", type=int, default=50)
     p = sub.add_parser("recent", parents=[base]); p.add_argument("-d", "--days", type=int, default=3); p.add_argument("-n", "--limit", type=int, default=100)
@@ -518,7 +571,11 @@ def main():
     p = sub.add_parser("openfile", parents=[base]); p.add_argument("name")
     a = ap.parse_args()
     if a.cmd == "list":
-        r = list_chats()
+        if a.limit is not None or a.offset:
+            r = list_chat_page(a.limit if a.limit is not None else 100, a.offset)
+            a.cmd = 'list-page'
+        else:
+            r = list_chats()
     elif a.cmd == "read":
         r = read_chat(a.contact, a.limit, a.days)
     elif a.cmd == "search":

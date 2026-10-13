@@ -9,9 +9,11 @@ Pure pycryptodome (the VM has no `cryptography`). Usage: python decrypt_all.py [
 (raw key defaults to ../../key_windows.txt).
 """
 import sys, os, glob, hashlib, tempfile
+import hmac, struct
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "common"))
 from crypto_backend import aes_cbc_decrypt as _aes_cbc_dec
+from wal_snapshot import read_snapshot
 
 SKILL_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DECRYPTED_DIR = os.path.join(SKILL_DIR, "decrypted")
@@ -20,12 +22,22 @@ PAGE, RESERVE, SALT_SZ = 4096, 80, 16
 
 def decrypt_db(raw: bytes, src: str, dst: str) -> bool:
     """Decrypt one SQLCipher v4 db to plaintext sqlite. Returns False if key/format mismatch."""
-    with open(src, "rb") as f:
-        data = f.read()
+    try:
+        data = read_snapshot(src)
+    except ValueError:
+        return False
     if len(data) < PAGE or len(data) % PAGE:
         return False
     salt = data[:SALT_SZ]
     enc = hashlib.pbkdf2_hmac("sha512", raw, salt, 256000, 32)
+    mac_salt = bytes(value ^ 0x3A for value in salt)
+    mac_key = hashlib.pbkdf2_hmac('sha512', enc, mac_salt, 2, 32)
+    for number in range(1, len(data) // PAGE + 1):
+        page = data[(number - 1) * PAGE:number * PAGE]
+        offset = SALT_SZ if number == 1 else 0
+        expected = hmac.new(mac_key, page[offset:PAGE - 64] + struct.pack('<I', number), hashlib.sha512).digest()
+        if not hmac.compare_digest(expected, page[PAGE - 64:PAGE]):
+            return False
     rstart = PAGE - RESERVE
     # verify page 1 header before committing
     iv0 = data[rstart:rstart + 16]
@@ -62,6 +74,14 @@ def decrypt_db(raw: bytes, src: str, dst: str) -> bool:
     return True
 
 
+def find_storage_roots():
+    root = os.environ.get('WECHAT_DATA_ROOT')
+    if root:
+        root = os.path.expandvars(os.path.expanduser(root))
+        return glob.glob(os.path.join(root, '*', 'db_storage'))
+    return glob.glob(os.path.expanduser(r"~/Documents/xwechat_files/*/db_storage"))
+
+
 def main():
     if len(sys.argv) > 1:
         raw_hex = sys.argv[1].strip()
@@ -79,9 +99,9 @@ def main():
     if len(raw) != 32 or len(raw_hex) != 64:
         raise SystemExit("ERR: raw key must be exactly 64 hexadecimal characters")
 
-    src_roots = glob.glob(os.path.expanduser(r"~/Documents/xwechat_files/*/db_storage"))
+    src_roots = find_storage_roots()
     if not src_roots:
-        print("ERR: no encrypted db_storage under ~/Documents/xwechat_files/*/"); sys.exit(1)
+        print("ERR: no encrypted db_storage found; set WECHAT_DATA_ROOT to the xwechat_files directory if moved"); sys.exit(1)
     src_root = max(src_roots, key=os.path.getmtime)
     account = os.path.basename(os.path.dirname(src_root))  # {wxid}_{device}
     dst_root = os.path.join(DECRYPTED_DIR, account, "db_storage")

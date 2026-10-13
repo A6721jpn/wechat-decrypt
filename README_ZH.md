@@ -73,6 +73,7 @@ Agent 调用建议使用 `--json`；人工调试可省略。
 
 ```bash
 .venv/bin/python scripts/common/query.py list --json
+.venv/bin/python scripts/common/query.py list --limit 100 --offset 0 --json
 .venv/bin/python scripts/common/query.py read "张三" -d 7 -n 50 --json
 .venv/bin/python scripts/common/query.py search "截止时间" -d 30 -n 50 --json
 .venv/bin/python scripts/common/query.py recent -d 3 -n 100 --json
@@ -90,7 +91,7 @@ MCP 暴露相同核心能力：
 
 | 工具 | 用途 |
 |---|---|
-| `wechat_list_chats` | 列出会话 |
+| `wechat_list_chats` | 默认每页 100 个会话，通过 `offset` 继续读取 |
 | `wechat_read_chat` | 读取联系人或群聊 |
 | `wechat_search_messages` | 全文搜索 |
 | `wechat_recent_messages` | 查看最近动态 |
@@ -98,6 +99,17 @@ MCP 暴露相同核心能力：
 | `wechat_system_events` | 拍一拍、撤回、群/好友变更、红包、转账、通话、置顶及未知事件 |
 
 ## 导出与语音
+
+普通文本读取保留完整正文与换行。查询天数必须是正整数，结果条数接受 1–2000。
+联系人名称匹配多人时会返回候选列表，需要用具体 wxid 选择后再读取或导出。
+
+Windows 用户若移动过数据目录，可把 `WECHAT_DATA_ROOT` 设为 `xwechat_files` 目录；
+提取、解密及附件查找会使用这个位置。解密会纳入 WAL 中已提交的页面，并在替换旧结果前
+逐页验证加密数据；捕获期间源文件变化时，请在微信空闲后重试。详见 [Windows 指南](references/windows.md)。
+
+附件导出会在 `docs/`、`videos/` 和 `images/` 中保留相对目录，避免同名文件覆盖。
+Windows 附件从原始账号目录读取。加密图片原文件的解码与聊天记录中的图片关联仍属于
+[单独的功能提案](docs/media-manifest-proposal.md)。
 
 ```bash
 .venv/bin/python scripts/common/export_chat.py "张三" --year 2026 -o ~/Desktop/zhangsan-2026.txt
