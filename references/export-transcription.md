@@ -15,6 +15,23 @@ Export only the requested contact and date range. If matching returns multiple p
 
 Omitting dates exports all available history. The exporter merges message shards, orders messages chronologically, and writes the output with private permissions.
 
+## Image manifest and transcript links
+
+Add `--with-media` to associate image messages with the local resource index and
+export only images belonging to the selected conversation and date window:
+
+```bash
+"$PYTHON" "$SKILL_DIR/scripts/common/export_chat.py" CONTACT --year 2026 --with-media --no-transcribe -o /path/to/chat.html
+```
+
+This creates `chat.html`, `chat.media.json` and `chat.assets/`. TXT shows relative
+paths, Markdown and HTML preview supported plaintext images. Format is inferred
+from `.md`/`.html` or selected with `--format txt|markdown|html`. Keep the three
+outputs together when moving them. The manifest explicitly distinguishes resolved,
+missing and encrypted/unsupported images. Encrypted originals are not decoded.
+The initial adapter covers images; video/file/voice messages keep their existing
+export behavior. See [the format and supported index profile](../docs/media-manifest-proposal.md).
+
 ## Voice model consent
 
 Check both `voice-backend` and `voice-model` in `doctor.py --json` before any export that may include audio.

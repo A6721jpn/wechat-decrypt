@@ -108,12 +108,14 @@ Windows 用户若移动过数据目录，可把 `WECHAT_DATA_ROOT` 设为 `xwech
 逐页验证加密数据；捕获期间源文件变化时，请在微信空闲后重试。详见 [Windows 指南](references/windows.md)。
 
 附件导出会在 `docs/`、`videos/` 和 `images/` 中保留相对目录，避免同名文件覆盖。
-Windows 附件从原始账号目录读取。加密图片原文件的解码与聊天记录中的图片关联仍属于
-[单独的功能提案](docs/media-manifest-proposal.md)。
+Windows 附件从原始账号目录读取。聊天导出加 `--with-media` 可生成逐消息图片清单和本地链接：
+TXT 显示相对路径，`.md` 和 `.html` 可预览支持的本地图片；缺失或仍加密的图片明确标注状态。
+详见 [媒体清单指南](docs/media-manifest-proposal.md)。
 
 ```bash
 .venv/bin/python scripts/common/export_chat.py "张三" --year 2026 -o ~/Desktop/zhangsan-2026.txt
 .venv/bin/python scripts/common/export_chat.py "张三" --start 2026-01-01 --end 2026-06-30
+.venv/bin/python scripts/common/export_chat.py "张三" --year 2026 --with-media --no-transcribe -o zhangsan.html
 ```
 
 平台对应的 Whisper large-v3 模型已缓存时，语音默认自动转写；模型不在时，普通导出保留 `[Audio]`，不会自行下载。只有确认约 3 GB 的首次下载后才使用 `--transcribe`；用 `--no-transcribe` 可明确关闭。详见 [导出与转写指南](references/export-transcription.md)。

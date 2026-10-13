@@ -14,6 +14,7 @@ import json
 import re
 import platform
 from datetime import datetime, timedelta
+from pathlib import Path
 
 SKILL_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, SKILL_DIR)
@@ -193,6 +194,8 @@ def main():
     parser.add_argument("--transcribe", action="store_true", help="强制转写语音（即使模型未安装也尝试，触发首次下载）")
     parser.add_argument("--no-transcribe", action="store_true", help="禁用语音转写（即使模型已安装也保留 [Audio]）")
     parser.add_argument("--voice-map", help="复用已有转写 JSON（server_id→文本），跳过重新转写")
+    parser.add_argument("--with-media", action="store_true", help="导出图片媒体清单及可读取的本地图片，给聊天记录添加相对链接")
+    parser.add_argument("--format", choices=["txt", "markdown", "html"], help="输出格式；默认按 .md/.html 扩展名判断，其余为 TXT")
     args = parser.parse_args()
 
     if not message.has_zstd_decoder():
@@ -276,15 +279,33 @@ def main():
             label = f"{args.start or 'begin'}_{args.end or 'now'}"
         else:
             label = "all"
-        out = os.path.expanduser(f"~/Desktop/{slug}_{label}.txt")
+        extension = {'markdown': 'md', 'html': 'html'}.get(args.format, 'txt')
+        out = os.path.expanduser(f"~/Desktop/{slug}_{label}.{extension}")
 
-    with _open_private_text(out) as f:
-        f.write(f"=== 与 {display} 的对话 ===\n")
-        f.write(f"导出时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        f.write(f"消息范围: {start_dt.strftime('%Y-%m-%d')} ~ {(end_dt - timedelta(days=1)).strftime('%Y-%m-%d')}\n")
-        f.write(f"共 {len(deduped)} 条消息\n\n")
+    import transcript_render
+    output_format = args.format or {'.md': 'markdown', '.html': 'html', '.htm': 'html'}.get(Path(out).suffix.lower(), 'txt')
+    assets = {}
+    if args.with_media:
+        import media_manifest
+        manifest = media_manifest.export_images(deduped, wxid, table, out)
+        manifest_path = str(Path(out).with_suffix('.media.json'))
+        media_manifest.write_manifest(manifest_path, manifest)
+        assets = {(e['message']['shard'], str(e['message']['local_id'])): e for e in manifest['entries']}
+        print(f"媒体清单: {manifest_path}", file=sys.stderr)
+        counts = {status: sum(e['status'] == status for e in manifest['entries'])
+                  for status in ('resolved', 'not_found', 'encrypted_unsupported')}
+        print(f"图片：已关联 {counts['resolved']}，未找到 {counts['not_found']}，"
+              f"仍加密 {counts['encrypted_unsupported']}", file=sys.stderr)
+    header = (f"=== 与 {display} 的对话 ===\n"
+              f"导出时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+              f"消息范围: {start_dt.strftime('%Y-%m-%d')} ~ {(end_dt - timedelta(days=1)).strftime('%Y-%m-%d')}\n"
+              f"共 {len(deduped)} 条消息\n")
+    def rendered_messages():
         for row in deduped:
-            f.write(format_row(row, voice_map, is_group, my_name, peer_name) + "\n")
+            key = ('message/' + Path(row['_db']).name, str(row['local_id']))
+            yield format_row(row, voice_map, is_group, my_name, peer_name), assets.get(key)
+    with _open_private_text(out) as f:
+        f.writelines(transcript_render.render(header, rendered_messages(), output_format))
 
     print(f"\n导出完成: {out} ({len(deduped)} 条)", file=sys.stderr)
 

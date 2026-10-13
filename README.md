@@ -112,12 +112,15 @@ See the [Windows guide](references/windows.md).
 
 Attachment export preserves relative source directories under `docs/`, `videos/`
 and `images/`, so same-named files survive. Windows attachments are read from the
-original account directory. Encrypted image originals remain unsupported, and
-transcript-to-image association remains a [separate proposal](docs/media-manifest-proposal.md).
+original account directory. Add `--with-media` to the chat exporter for a per-message
+image manifest and local image links. TXT shows relative paths; `.md` and `.html`
+outputs embed supported local images. Missing or encrypted originals retain an
+explicit status. See the [media-manifest guide](docs/media-manifest-proposal.md).
 
 ```bash
 .venv/bin/python scripts/common/export_chat.py "Alice" --year 2026 -o ~/Desktop/alice-2026.txt
 .venv/bin/python scripts/common/export_chat.py "Alice" --start 2026-01-01 --end 2026-06-30
+.venv/bin/python scripts/common/export_chat.py "Alice" --year 2026 --with-media --no-transcribe -o alice.html
 ```
 
 If the platform's Whisper large-v3 model is already cached, voice transcription is automatic. Otherwise ordinary export leaves `[Audio]` and does not download a model. Use `--transcribe` only after approving the approximately 3 GB first download, or `--no-transcribe` to disable transcription. See [the export and transcription guide](references/export-transcription.md).

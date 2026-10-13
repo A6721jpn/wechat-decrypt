@@ -1,50 +1,100 @@
-# Per-message local media manifest proposal
+# Per-message local image manifest
 
-Status: accepted direction for [issue #6](https://github.com/tzwkb/wechat-decrypt/issues/6),
-pending verified message-to-resource fixtures. This document specifies a proposed
-interface; transcript-to-image association is not implemented yet.
+Implemented for [issue #6](https://github.com/tzwkb/wechat-decrypt/issues/6).
+The filename retains the original proposal link; this document describes the
+shipping interface.
 
-## First increment
+## Export
 
-Export a local JSON sidecar for the selected conversation and date window. Each
-image entry identifies the account snapshot, conversation/table, database shard
-and local message ID; include the server ID when present. A local ID can repeat
-across both shards and conversation tables. A server ID is optional and cannot
-serve as the sole identity.
+```bash
+python scripts/common/export_chat.py CONTACT --year 2026 --with-media --no-transcribe -o chat.html
+```
 
-An asset entry contains its kind and one of `resolved`, `not_found` or
-`encrypted_unsupported`. A resolved entry has a path relative to the export root.
-Unresolved entries keep the transcript placeholder and report a reason. An
-ambiguous mapping stays unresolved; it must not choose the first candidate.
+`--with-media` produces the transcript, a sibling `chat.media.json` sidecar and
+`chat.assets/`. Only image messages in the selected conversation and date window
+are considered. Ordinary exports remain unchanged when this flag is omitted.
 
-TXT can append the relative path. Markdown/HTML links or previews can follow once
-the mapping and sidecar are validated. The resolver must use a demonstrated
-resource-index relationship. A matching filename or an XML MD5 alone does not
-establish that relationship. Export only assets selected by this conversation and
-date window, retaining distinct destinations for same-named files.
+The extension chooses TXT, Markdown (`.md`) or HTML (`.html`/`.htm`). Override it
+with `--format txt|markdown|html`. TXT appends relative image paths; Markdown/HTML
+embed supported local JPEG, PNG, GIF or WebP images. Keep the transcript, JSON and
+assets directory together when moving an export. HTML is static and escapes
+message markup. Markdown escapes message markup before adding generated links.
 
-Keep the manifest local. Exclude raw database or image keys, authentication
-fields, CDN URLs and raw packed resource payloads. The first increment does not
-decode encrypted image originals or trigger media downloads.
+## Manifest version 1
 
-## Evidence needed before implementation
+```json
+{
+  "version": 1,
+  "transcript": "chat.html",
+  "snapshot": "opaque local snapshot fingerprint",
+  "entries": [{
+    "message": {
+      "conversation": "wxid_example",
+      "table": "Msg_conversation_hash",
+      "shard": "message/message_0.db",
+      "local_id": 42,
+      "server_id": "100042"
+    },
+    "kind": "image",
+    "status": "resolved",
+    "files": [{"path": "chat.assets/message_identity/image.dat.png"}]
+  }]
+}
+```
 
-Provide minimal table definitions and synthetic rows showing the relationships
-between message identity, resource-index identity and an existing local asset.
-Record the WeChat version and platform from which those relationships were
-verified, without including private messages, account identifiers or key material.
-The public implementations inspected so far use filename/MD5 heuristics for
-images and do not supply a verified fixture for this repository's resolver.
+The snapshot fingerprint scopes the manifest to local storage and database file
+metadata. It does not fingerprint every database byte. Message identity includes
+conversation/table, shard and local ID; the server ID is optional. Equal local IDs
+in different shards or conversations stay distinct. Each message gets a distinct
+asset directory, so equal basenames do not overwrite other messages. A stored
+`.dat` containing a supported plaintext image receives a detected image suffix.
 
-Acceptance cases must cover:
+Statuses are `resolved`, `not_found` and `encrypted_unsupported`. Unresolved entries
+have empty `files` and a `reason` such as `resource_missing`, `hardlink_missing`,
+`ambiguous_resource`, `ambiguous_location`, `index_missing`, `unsupported_schema`,
+`unsupported_resource_profile`, `original_account_missing` or
+`file_missing_or_unreadable`. Placeholders remain visible in all three transcript
+formats. An ambiguous relationship never selects the first candidate.
 
-- A known message resolves to the correct local image through the index.
-- Equal local IDs in different shards or conversations remain distinct.
-- An absent server ID can still be handled using the full local identity.
-- Missing, encrypted, ambiguous and unsupported resources remain explicit.
-- Equal basenames retain distinct exported files; paths cannot escape the export root.
-- Conversation/date filtering excludes unrelated assets, and secrets stay absent.
+## Verified image-index profile
 
-Keep issue #6 open until the mapping fixtures, resolver and transcript links pass
-these cases. The attachment fixes in PRs #5 and #10 are useful prerequisites but
-do not complete this feature.
+Read-only inspection and a native message/index join verified this profile on
+macOS WeChat **4.1.15 (270102)**. Synthetic SQLite fixtures reproduce its table/field
+relationships; the native check exercises the read-only SQLCipher path. Windows uses the
+same adapter on the decrypted mirror and locates files in the original account;
+its native account format still depends on this index profile.
+
+1. Resolve the selected conversation through `message/message_resource.db`:
+   `ChatName2Id.rowid -> MessageResourceInfo.chat_id`.
+2. Match local ID, creation time, image type and server ID when present. Reject
+   multiple matching resource rows. Shard identity stays in the exported entry.
+3. Read the image resource identifier from protobuf field **2.1** of
+   `MessageResourceInfo.packed_info`, accepting only the demonstrated 32-hex form.
+4. Look that identifier up in the registered `image_hardlink_info_v4.file_name`
+   profile in `hardlink/hardlink.db`. Resolve `dir1` and `dir2` through `dir2id`,
+   scoped to the independently registered conversation directory.
+5. Read the registered file below
+   `msg/attach/<dir1>/<dir2>/Img/<file_name>`. Different directory candidates stay
+   ambiguous. The resolver does not use the message XML MD5 or scan unrelated
+   cache files for filename guesses.
+
+Unknown schemas/protobuf profiles remain unresolved with an explicit reason.
+The exporter only copies supported plaintext images. Encrypted `.dat` originals
+remain `encrypted_unsupported`; image AES/XOR decoding is a separate feature, as
+specified in the issue. Video, file and voice export retain their existing behavior.
+
+## Local data and verification
+
+The sidecar omits raw resource payloads, database/image keys, authentication fields,
+CDN URLs and absolute source paths. It contains conversation/message identifiers,
+so keep it private like the transcript. Sidecars and copied files use private
+permissions; source and destination paths must remain inside their allowed roots.
+The exporter opens source files read-only and rejects a copy that changes while
+being read. It does not download media or repair a live database.
+
+Tests cover correct index-to-image mapping despite a different XML MD5, missing
+server IDs, equal local IDs across shards/conversations, missing/encrypted assets,
+ambiguous resources/locations, unsupported profiles, selection/date filtering,
+collision-safe output, secret omission, traversal/symlink refusal and full CLI
+exports in TXT, Markdown and HTML. A browser smoke test verifies that the generated
+HTML loads its relative image and shows the unresolved states.
