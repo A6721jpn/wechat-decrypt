@@ -73,6 +73,7 @@ Agents should prefer `--json`; omit it for human-readable output.
 
 ```bash
 .venv/bin/python scripts/common/query.py list --json
+.venv/bin/python scripts/common/query.py list --limit 100 --offset 0 --json
 .venv/bin/python scripts/common/query.py read "Alice" -d 7 -n 50 --json
 .venv/bin/python scripts/common/query.py search "deadline" -d 30 -n 50 --json
 .venv/bin/python scripts/common/query.py recent -d 3 -n 100 --json
@@ -90,7 +91,7 @@ The MCP server exposes the same core operations:
 
 | Tool | Purpose |
 |---|---|
-| `wechat_list_chats` | List conversations |
+| `wechat_list_chats` | List conversations, 100 per page by default; continue with `offset` |
 | `wechat_read_chat` | Read one contact or group |
 | `wechat_search_messages` | Full-text search |
 | `wechat_recent_messages` | Review recent activity |
@@ -98,6 +99,21 @@ The MCP server exposes the same core operations:
 | `wechat_system_events` | Pats, recalls, group/friend changes, payments, calls, pins, and unknown events |
 
 ## Export and voice
+
+Ordinary text reads preserve the complete message and its line breaks. Query day
+windows must be positive integers; result limits accept 1–2000. Ambiguous contact
+names return candidates so you can select an exact wxid before reading or exporting.
+
+On Windows, set `WECHAT_DATA_ROOT` to the `xwechat_files` directory when storage has
+moved. Extraction, decryption and attachment discovery use that location. Decryption
+includes committed WAL pages and authenticates every encrypted page before replacing
+an existing snapshot; retry while WeChat is idle if the source changes during capture.
+See the [Windows guide](references/windows.md).
+
+Attachment export preserves relative source directories under `docs/`, `videos/`
+and `images/`, so same-named files survive. Windows attachments are read from the
+original account directory. Encrypted image originals remain unsupported, and
+transcript-to-image association remains a [separate proposal](docs/media-manifest-proposal.md).
 
 ```bash
 .venv/bin/python scripts/common/export_chat.py "Alice" --year 2026 -o ~/Desktop/alice-2026.txt

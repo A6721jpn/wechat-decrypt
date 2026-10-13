@@ -25,6 +25,17 @@ $Python = ".\.venv\Scripts\python.exe"
 
 ## Extract and decrypt
 
+If WeChat storage was moved, set the parent of the account directories (the
+`xwechat_files` directory) before running extraction, decryption or queries:
+
+```powershell
+$env:WECHAT_DATA_ROOT = 'D:\WeChat Data\xwechat_files'
+```
+
+An explicitly configured missing directory fails without selecting a different
+account. Omit the variable to use the normal Documents location. Attachments stay
+in the original account directory; the plaintext mirror contains databases only.
+
 This flow requires an interactive desktop session. Before running extraction, tell the user it will close WeChat and that they must restart WeChat manually from the desktop when prompted.
 
 ```powershell
@@ -41,6 +52,14 @@ After extraction:
 ```
 
 `decrypt_all.py` reads `key_windows.txt` by default and builds a plaintext mirror at `decrypted\<account>\db_storage\`. Files are written atomically with private permissions where the platform supports them. Never upload or expose this directory.
+
+Snapshots include WAL pages through the last committed transaction, excluding
+unfinished writes and old WAL generations. Every SQLCipher page is authenticated
+before output replacement. Invalid pages or an unstable main/WAL pair preserve an
+existing output; retry capture while WeChat is idle. Capture uses file metadata
+checks rather than SQLite reader locks. The WAL and authentication regressions use
+synthetic encrypted pages and SQLite fixtures; they do not certify every live
+WeChat version. See [snapshot details](../docs/windows-wal-snapshots.md).
 
 ## Troubleshooting
 

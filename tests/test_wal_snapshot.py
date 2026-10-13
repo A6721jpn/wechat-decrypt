@@ -111,7 +111,8 @@ def test_real_sqlite_commit_not_present_in_main_is_recovered(tmp_path):
         con.close()
 
 
-def test_native_decrypt_consumes_encrypted_committed_wal(tmp_path):
+@pytest.mark.parametrize('corrupt_committed_page', [False, True])
+def test_native_decrypt_consumes_encrypted_committed_wal(tmp_path, corrupt_committed_page):
     import hashlib
     from crypto_backend import aes_cbc_encrypt
     path = Path(__file__).parents[1] / 'scripts' / 'windows' / 'decrypt_all.py'
@@ -134,9 +135,18 @@ def test_native_decrypt_consumes_encrypted_committed_wal(tmp_path):
         return page + hmac.new(mac_key, page[offset:] + struct.pack('<I', number), hashlib.sha512).digest()
     source = tmp_path / 'encrypted.db'
     source.write_bytes(encrypted(1, b'header') + encrypted(2, b'old'))
-    (tmp_path / 'encrypted.db-wal').write_bytes(_wal([(2, 2, encrypted(2, b'new-committed')),
+    committed_page = bytearray(encrypted(2, b'new-committed'))
+    if corrupt_committed_page:
+        # A valid WAL checksum does not authenticate the SQLCipher ciphertext.
+        committed_page[128] ^= 1
+    (tmp_path / 'encrypted.db-wal').write_bytes(_wal([(2, 2, bytes(committed_page)),
                                                     (2, 0, encrypted(2, b'not-committed'))]))
     output = tmp_path / 'plain.db'
+    if corrupt_committed_page:
+        output.write_bytes(b'previous verified snapshot')
+        assert native.decrypt_db(raw, str(source), str(output)) is False
+        assert output.read_bytes() == b'previous verified snapshot'
+        return
     assert native.decrypt_db(raw, str(source), str(output))
     assert output.read_bytes()[PAGE + 100:PAGE + 113] == b'new-committed'
 
