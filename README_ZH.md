@@ -141,6 +141,13 @@ bash -n setup.sh scripts/macos/extract_key.sh
 
 真实数据检查见 [e2e/README.md](e2e/README.md)。Skill 入口是 [SKILL.md](SKILL.md)；平台和导出细节放在 `references/`，减少 Agent 默认上下文。
 
+## 贡献与致谢
+
+感谢所有[代码贡献者](https://github.com/tzwkb/wechat-decrypt/graphs/contributors)，也感谢通过问题报告和方案建议帮助改进项目的贡献者：
+
+- [@Allen-CDA](https://github.com/Allen-CDA)：诊断 Windows 微信 4.1.12.55 密钥提取失败问题，并提供多 SHA-512 入口挂钩与进程检测优化建议（[#1](https://github.com/tzwkb/wechat-decrypt/issues/1)）。
+- [@ShiTan-677](https://github.com/ShiTan-677)：提出逐消息本地媒体清单与聊天导出图片关联方案（[#6](https://github.com/tzwkb/wechat-decrypt/issues/6)）。
+
 ## License
 
 MIT
