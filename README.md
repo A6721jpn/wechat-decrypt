@@ -146,6 +146,13 @@ bash -n setup.sh scripts/macos/extract_key.sh
 
 Real-data checks are documented in [e2e/README.md](e2e/README.md). The Skill entrypoint is [SKILL.md](SKILL.md); platform and export details live under `references/` to keep agent context small.
 
+## Contributors and acknowledgments
+
+Thanks to all [code contributors](https://github.com/tzwkb/wechat-decrypt/graphs/contributors). We also acknowledge contributions through issue reports and design proposals:
+
+- [@Allen-CDA](https://github.com/Allen-CDA) diagnosed the Windows WeChat 4.1.12.55 key-extraction failure and provided multi-entry SHA-512 hook and process-detection improvement suggestions ([#1](https://github.com/tzwkb/wechat-decrypt/issues/1)).
+- [@ShiTan-677](https://github.com/ShiTan-677) proposed per-message local media manifests and transcript image links ([#6](https://github.com/tzwkb/wechat-decrypt/issues/6)).
+
 ## License
 
 MIT
