@@ -143,10 +143,11 @@ bash -n setup.sh scripts/macos/extract_key.sh
 
 ## 贡献与致谢
 
-感谢所有[代码贡献者](https://github.com/tzwkb/wechat-decrypt/graphs/contributors)，也感谢通过问题报告和方案建议帮助改进项目的贡献者：
+感谢所有[代码贡献者](https://github.com/tzwkb/wechat-decrypt/graphs/contributors)，也感谢通过问题报告和方案建议帮助改进项目的贡献者。具体贡献包括：
 
 - [@Allen-CDA](https://github.com/Allen-CDA)：诊断 Windows 微信 4.1.12.55 密钥提取失败问题，并提供多 SHA-512 入口挂钩与进程检测优化建议（[#1](https://github.com/tzwkb/wechat-decrypt/issues/1)）。
-- [@ShiTan-677](https://github.com/ShiTan-677)：提出逐消息本地媒体清单与聊天导出图片关联方案（[#6](https://github.com/tzwkb/wechat-decrypt/issues/6)）。
+- [@Lee-Juntong](https://github.com/Lee-Juntong)：贡献完整文本保留、查询参数校验与流式读取、会话列表分页、Windows 自定义数据目录与附件定位、SQLCipher 逐页认证及已提交 WAL 快照支持（[#7](https://github.com/tzwkb/wechat-decrypt/pull/7)、[#8](https://github.com/tzwkb/wechat-decrypt/pull/8)、[#9](https://github.com/tzwkb/wechat-decrypt/pull/9)、[#10](https://github.com/tzwkb/wechat-decrypt/pull/10)、[#11](https://github.com/tzwkb/wechat-decrypt/pull/11)、[#12](https://github.com/tzwkb/wechat-decrypt/pull/12)、[#13](https://github.com/tzwkb/wechat-decrypt/pull/13)、[#14](https://github.com/tzwkb/wechat-decrypt/pull/14)）。
+- [@ShiTan-677](https://github.com/ShiTan-677)：贡献按数据库分片解析发送者、联系人唯一匹配与附件导出防覆盖修复（[#3](https://github.com/tzwkb/wechat-decrypt/pull/3)、[#4](https://github.com/tzwkb/wechat-decrypt/pull/4)、[#5](https://github.com/tzwkb/wechat-decrypt/pull/5)），并提出逐消息本地媒体清单与聊天导出图片关联方案（[#6](https://github.com/tzwkb/wechat-decrypt/issues/6)）。
 
 ## License
 

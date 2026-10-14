@@ -148,10 +148,11 @@ Real-data checks are documented in [e2e/README.md](e2e/README.md). The Skill ent
 
 ## Contributors and acknowledgments
 
-Thanks to all [code contributors](https://github.com/tzwkb/wechat-decrypt/graphs/contributors). We also acknowledge contributions through issue reports and design proposals:
+Thanks to all [code contributors](https://github.com/tzwkb/wechat-decrypt/graphs/contributors) and everyone who helps through issue reports and design proposals. Contributions include:
 
 - [@Allen-CDA](https://github.com/Allen-CDA) diagnosed the Windows WeChat 4.1.12.55 key-extraction failure and provided multi-entry SHA-512 hook and process-detection improvement suggestions ([#1](https://github.com/tzwkb/wechat-decrypt/issues/1)).
-- [@ShiTan-677](https://github.com/ShiTan-677) proposed per-message local media manifests and transcript image links ([#6](https://github.com/tzwkb/wechat-decrypt/issues/6)).
+- [@Lee-Juntong](https://github.com/Lee-Juntong) contributed complete-text preservation, query validation and streaming, chat-list pagination, relocated Windows data and attachment paths, SQLCipher page authentication, and committed-WAL snapshots ([#7](https://github.com/tzwkb/wechat-decrypt/pull/7), [#8](https://github.com/tzwkb/wechat-decrypt/pull/8), [#9](https://github.com/tzwkb/wechat-decrypt/pull/9), [#10](https://github.com/tzwkb/wechat-decrypt/pull/10), [#11](https://github.com/tzwkb/wechat-decrypt/pull/11), [#12](https://github.com/tzwkb/wechat-decrypt/pull/12), [#13](https://github.com/tzwkb/wechat-decrypt/pull/13), [#14](https://github.com/tzwkb/wechat-decrypt/pull/14)).
+- [@ShiTan-677](https://github.com/ShiTan-677) contributed per-shard sender resolution, unambiguous contact selection, and collision-safe attachment export ([#3](https://github.com/tzwkb/wechat-decrypt/pull/3), [#4](https://github.com/tzwkb/wechat-decrypt/pull/4), [#5](https://github.com/tzwkb/wechat-decrypt/pull/5)), and proposed per-message local media manifests and transcript image links ([#6](https://github.com/tzwkb/wechat-decrypt/issues/6)).
 
 ## License
 
