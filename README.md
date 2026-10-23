@@ -67,6 +67,12 @@ For an existing user-skill junction that points elsewhere, use `powershell -File
 
 Install the optional Windows voice stack with `powershell -File setup.ps1 -WithVoice`. Ordinary query and export do not require it.
 
+### Optional on-demand MCP
+
+[On-demand mode](tools/mcp-on-demand/README.md) keeps a small connection process
+available and starts the WeChat backend only when needed. It is an opt-in setting
+for source checkouts; the setup scripts retain their existing behavior.
+
 ## Query
 
 Agents should prefer `--json`; omit it for human-readable output.
