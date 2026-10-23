@@ -44,7 +44,9 @@ On Windows, use the equivalent venv Python path. Interpret `fail` as blocking an
 | macOS setup, key failure, or WeChat update | Read [references/macos.md](references/macos.md) |
 | Windows setup, key failure, or WeChat update | Read [references/windows.md](references/windows.md) |
 
-MCP is a thin optional facade. If it is unavailable, use the same logic through `scripts/common/query.py` and request JSON:
+MCP is a thin optional facade. With [on-demand mode](tools/mcp-on-demand/README.md) configured, the backend starts when needed and exits after the response; a small connection process stays available. An absent backend while idle is normal. Do not start another permanent server or terminate the connection process to manage memory. Setup scripts register the direct backend again, so reapply on-demand configuration after running setup.
+
+If MCP is unavailable, use the same logic through `scripts/common/query.py` and request JSON:
 
 ```bash
 "$PYTHON" "$SKILL_DIR/scripts/common/query.py" list --json
